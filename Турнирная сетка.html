@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Турнирная сетка — Double / Single / Round Robin с турами</title>
+<style>
+:root {
+    --bg: #0b0f19; --card: #151b2b; --border: #2a344a;
+    --text: #e2e8f0; --dim: #64748b;
+    --accent: #6366f1; --win: #10b981; --lose: #ef4444; --gold: #f59e0b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+body { background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: auto; }
+.container { padding: 20px; max-width: 100%; }
+
+.header { text-align: center; margin-bottom: 25px; }
+.header h1 { font-size: 2.4em; background: linear-gradient(135deg, #818cf8, #34d399); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.setup-panel { max-width: 600px; margin: 0 auto; background: var(--card); padding: 24px; border-radius: 14px; border: 1px solid var(--border); }
+.input-group { display: flex; gap: 10px; margin-bottom: 15px; }
+input, select { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: white; outline: none; }
+button { cursor: pointer; padding: 10px 18px; border-radius: 8px; border: none; font-weight: 600; transition: 0.2s; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-success { background: var(--win); color: white; }
+.btn-success:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-danger { background: var(--lose); color: white; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--dim); }
+.btn-outline:hover { border-color: var(--text); color: var(--text); }
+.team-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+.chip { background: var(--bg); padding: 6px 14px; border-radius: 16px; border: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
+.chip span.remove { color: var(--lose); cursor: pointer; font-weight: bold; }
+
+.tournament-view { display: none; }
+.toolbar { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+.section-title { font-size: 1.2em; font-weight: bold; margin: 25px 0 12px 10px; padding-left: 12px; border-left: 4px solid var(--accent); }
+.bracket-container { display: flex; overflow-x: auto; padding-bottom: 20px; gap: 18px; }
+.round-column { display: flex; flex-direction: column; justify-content: space-around; min-width: 220px; gap: 16px; }
+.round-header { text-align: center; color: var(--dim); font-size: 0.75em; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+
+.match { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
+.match:hover { border-color: var(--accent); box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+.match.final-match { border: 2px solid var(--gold); box-shadow: 0 0 20px rgba(245, 158, 11, 0.15); }
+.team-slot { padding: 11px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+.team-slot:last-child { border-bottom: none; }
+.team-slot:hover { background: rgba(255,255,255,0.04); }
+.team-slot.winner { background: rgba(16, 185, 129, 0.15); color: var(--win); font-weight: 600; }
+.team-slot.winner::after { content: '✓'; }
+.team-slot.loser { opacity: 0.35; text-decoration: line-through; }
+.team-slot.empty { cursor: default; color: var(--dim); }
+.team-slot.empty:hover { background: transparent; }
+
+/* Round Robin styles */
+.rr-matrix { overflow-x: auto; margin: 20px 0; }
+.rr-matrix table { border-collapse: collapse; min-width: 100%; background: var(--card); border-radius: 12px; }
+.rr-matrix th, .rr-matrix td { padding: 10px 8px; text-align: center; border: 1px solid var(--border); }
+.rr-matrix th { background: #1e293b; color: var(--text); font-weight: 600; }
+.rr-matrix td { background: var(--bg); }
+.rr-matrix .cell-win { background: rgba(16, 185, 129, 0.25); }
+.rr-matrix .cell-loss { background: rgba(239, 68, 68, 0.25); }
+.rr-matrix .cell-draw { background: rgba(245, 158, 11, 0.2); }
+.rr-matrix .diagonal { background: #1e293b; color: var(--dim); }
+
+.rr-rounds { display: flex; flex-wrap: wrap; gap: 20px; margin-top: 20px; }
+.rr-round { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 15px; min-width: 250px; }
+.rr-round h4 { margin-bottom: 10px; color: var(--gold); }
+.rr-match { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 6px; border-radius: 6px; background: rgba(0,0,0,0.2); }
+.rr-team { padding: 5px 12px; border-radius: 20px; cursor: pointer; transition: 0.2s; flex: 1; text-align: center; }
+.rr-team:hover { background: rgba(255,255,255,0.1); }
+.rr-team.winner { background: var(--win); color: black; font-weight: bold; }
+.rr-team.loser { opacity: 0.5; text-decoration: line-through; }
+.rr-vs { margin: 0 10px; color: var(--dim); }
+
+.rr-standings table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; margin-top: 15px; }
+.rr-standings th { background: #1e293b; }
+
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 100; }
+.modal { background: var(--card); padding: 24px; border-radius: 14px; max-width: 480px; width: 90%; max-height: 80vh; overflow-y: auto; }
+.seed-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+
+.champion-banner { text-align: center; padding: 30px; margin: 20px auto; background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(245,158,11,0.05)); border: 1px solid var(--gold); border-radius: 14px; display: none; animation: pulse 2s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); } 70% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); } 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } }
+
+.tabs { display: flex; justify-content: center; gap: 5px; margin-bottom: 20px; }
+.tab-btn { padding: 8px 16px; background: transparent; border: 1px solid var(--border); color: var(--dim); border-radius: 30px; cursor: pointer; }
+.tab-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.progress-info { text-align: right; color: var(--dim); font-size: 0.9em; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>🏆 Турнирная Сетка</h1>
+        <p style="color:var(--dim)">Double / Single Elimination & Round Robin (с турами)</p>
+    </div>
+
+    <div id="setupScreen" class="setup-panel">
+        <h2 style="margin-bottom:15px">Регистрация команд</h2>
+        <div class="input-group">
+            <input type="text" id="teamNameInput" placeholder="Название команды..." onkeypress="if(event.key==='Enter') addTeam()">
+            <button class="btn-primary" onclick="addTeam()">Добавить</button>
+        </div>
+        <div class="team-list" id="teamList"></div>
+        <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <label style="color:var(--dim)">Тип турнира:</label>
+            <select id="tournamentTypeSelect" style="width:auto; min-width:200px;">
+                <option value="double" selected>Double Elimination</option>
+                <option value="single">Single Elimination</option>
+                <option value="rr">Round Robin (круговая)</option>
+            </select>
+        </div>
+        <div style="margin-top:20px; display:flex; gap:10px; flex-wrap:wrap;">
+            <button class="btn-success" id="startBtn" onclick="initTournament()" disabled>Начать турнир</button>
+            <button class="btn-outline" onclick="loadSample()">Пример (8 команд)</button>
+            <button class="btn-outline" onclick="clearTeams()">Очистить</button>
+            <button class="btn-outline" id="loadCacheBtn" style="display:none" onclick="loadFromCache()">Загрузить сохранение</button>
+        </div>
+    </div>
+
+    <div id="tournamentScreen" class="tournament-view">
+        <div class="toolbar">
+            <button class="btn-outline" onclick="goBack()">← Назад</button>
+            <button class="btn-outline" id="reshuffleBtn" onclick="reshuffleSeeds()">🔀 Перемешать</button>
+            <button class="btn-outline" onclick="openSeedEditor()">✏️ Расстановка</button>
+            <button class="btn-outline" onclick="saveToCache()">💾 Сохранить</button>
+            <button class="btn-outline" onclick="exportData()">📤 Экспорт</button>
+            <button class="btn-outline" onclick="importData()">📥 Импорт</button>
+            <button class="btn-danger" onclick="resetTournament()">🗑 Сброс</button>
+        </div>
+
+        <div class="tabs" id="tournamentTabs" style="display:none;">
+            <button class="tab-btn active" data-tab="double">Double Elim</button>
+            <button class="tab-btn" data-tab="single">Single Elim</button>
+            <button class="tab-btn" data-tab="rr">Round Robin</button>
+        </div>
+
+        <div id="championBanner" class="champion-banner">
+            <h1 style="font-size:3em">👑</h1>
+            <h2 id="championName">Команда</h2>
+            <p id="championDesc">Победитель турнира!</p>
+        </div>
+
+        <!-- Double Elimination view -->
+        <div id="doubleElimView">
+            <div class="section-title" style="border-color: var(--win)">Верхняя сетка (Winners Bracket)</div>
+            <div class="bracket-container" id="wbContainer"></div>
+            <div class="section-title" style="border-color: var(--lose)">Нижняя сетка (Losers Bracket)</div>
+            <div class="bracket-container" id="lbContainer"></div>
+            <div class="section-title" style="border-color: var(--gold)">Гранд-Финал</div>
+            <div style="display:flex; justify-content:center; padding: 10px;">
+                <div id="gfContainer" style="width: 220px;"></div>
+            </div>
+        </div>
+
+        <!-- Single Elimination view -->
+        <div id="singleElimView" style="display:none;">
+            <div class="section-title" style="border-color: var(--win)">Плей-офф</div>
+            <div class="bracket-container" id="seBracketContainer"></div>
+            <div class="section-title" style="border-color: var(--gold)">Финал</div>
+            <div style="display:flex; justify-content:center; padding: 10px;">
+                <div id="seFinalContainer" style="width: 220px;"></div>
+            </div>
+        </div>
+
+        <!-- Round Robin view -->
+        <div id="roundRobinView" style="display:none;">
+            <div class="progress-info" id="rrProgress"></div>
+            <div class="section-title" style="border-color: var(--gold)">Матрица результатов</div>
+            <div id="rrMatrixContainer" class="rr-matrix"></div>
+            <div class="section-title" style="border-color: var(--accent)">Туры</div>
+            <div id="rrRoundsContainer" class="rr-rounds"></div>
+            <div class="section-title" style="border-color: var(--accent)">Турнирная таблица</div>
+            <div id="rrStandingsContainer" class="rr-standings"></div>
+        </div>
+    </div>
+</div>
+
+<div id="seedModal" class="modal-overlay">
+    <div class="modal">
+        <h3 style="margin-bottom:15px">Ручная расстановка (Раунд 1)</h3>
+        <div id="seedEditorContent"></div>
+        <div style="margin-top:15px; display:flex; justify-content:flex-end; gap:10px;">
+            <button class="btn-outline" onclick="closeSeedEditor()">Отмена</button>
+            <button class="btn-success" onclick="applySeeds()">Применить</button>
+        </div>
+    </div>
+</div>
+
+<!-- Скрытый input для импорта файла -->
+<input type="file" id="importFileInput" accept=".json,application/json" style="display:none;" />
+
+<script>
+// --- STATE ---
+let teams = [];
+let currentTournamentType = 'double';
+let tournamentData = {
+    double: { matches: {}, isDirty: false },
+    single: { matches: {}, isDirty: false },
+    rr: { 
+        rounds: [],           // массив туров
+        results: {},          // results[teamA][teamB] = winner (teamA < teamB)
+        standings: {}, 
+        isDirty: false 
+    }
+};
+const $ = id => document.getElementById(id);
+
+// --- INIT ---
+function init() {
+    if(localStorage.getItem('de_tournament_v10')) $('loadCacheBtn').style.display = 'inline-block';
+    updateStartBtn();
+}
+
+// --- TEAM MANAGEMENT ---
+function addTeam() {
+    const input = $('teamNameInput');
+    const name = input.value.trim();
+    if (!name || teams.includes(name)) return;
+    teams.push(name); input.value = ''; updateStartBtn(); renderTeamList();
+}
+function removeTeam(i) { teams.splice(i,1); updateStartBtn(); renderTeamList(); }
+function clearTeams() { teams = []; updateStartBtn(); renderTeamList(); }
+function loadSample() { teams = ['Alpha','Beta','Gamma','Delta','Epsilon','Zeta','Eta','Theta']; updateStartBtn(); renderTeamList(); }
+function renderTeamList() {
+    $('teamList').innerHTML = teams.map((t,i) => `<div class="chip">${t} <span class="remove" onclick="removeTeam(${i})">×</span></div>`).join('');
+}
+function updateStartBtn() {
+    $('startBtn').disabled = teams.length < 2;
+}
+
+// --- UTILS ---
+function nextPow2(n) { let p=1; while(p<n) p*=2; return p; }
+function shuffle(a) { for(let i=a.length-1;i>0;i--){let j=Math.random()*i|0;[a[i],a[j]]=[a[j],a[i]]} return a; }
+function escA(s) { return s?s.replace(/'/g,"\\'"):''; }
+
+// ========== DOUBLE & SINGLE (без изменений) ==========
+function generateDoubleBracket(seedArray) {
+    const size = nextPow2(seedArray.length);
+    const padded = [...seedArray]; while(padded.length < size) padded.push(null);
+    const wbRoundsCount = Math.log2(size);
+    const matches = {};
+    const wb = [];
+    for(let r=0; r<wbRoundsCount; r++) {
+        const count = size / Math.pow(2, r+1);
+        const round = [];
+        for(let i=0; i<count; i++) {
+            const id = `WB-R${r+1}-M${i}`;
+            const m = { id, round:`WB-R${r+1}`, index:i, p1:null, p2:null, winner:null, nextWin:null, nextLoss:null, slotWin:'p1', slotLoss:'p1' };
+            if(r===0) { m.p1 = padded[i*2]; m.p2 = padded[i*2+1]; }
+            if(r < wbRoundsCount-1) {
+                m.nextWin = `WB-R${r+2}-M${Math.floor(i/2)}`;
+                m.slotWin = i%2===0 ? 'p1' : 'p2';
+            } else {
+                m.nextWin = 'GF'; m.slotWin = 'p1';
+            }
+            matches[id] = m; round.push(m);
+        }
+        wb.push(round);
+    }
+
+    const lbRoundsCount = wbRoundsCount > 1 ? 2 * wbRoundsCount - 2 : 0;
+    const lb = [];
+    for(let k=0; k<lbRoundsCount; k++) {
+        const count = Math.floor(size / Math.pow(2, Math.floor(k/2) + 2));
+        const round = [];
+        for(let i=0; i<count; i++) {
+            const id = `LB-R${k+1}-M${i}`;
+            const m = { id, round:`LB-R${k+1}`, index:i, p1:null, p2:null, winner:null, nextWin:null, nextLoss:null, slotWin:'p1', slotLoss:'p1' };
+            matches[id] = m; round.push(m);
+        }
+        lb.push(round);
+    }
+    for(let k=0; k<lbRoundsCount; k++) {
+        const round = lb[k];
+        if(k === 0) {
+            for(let i=0; i<round.length; i++) {
+                wb[0][2*i].nextLoss = round[i].id; wb[0][2*i].slotLoss = 'p1';
+                wb[0][2*i+1].nextLoss = round[i].id; wb[0][2*i+1].slotLoss = 'p2';
+            }
+        } else if(k % 2 !== 0) {
+            const wbIdx = (k+1)/2; 
+            for(let i=0; i<round.length; i++) {
+                lb[k-1][i].nextWin = round[i].id; lb[k-1][i].slotWin = 'p1';
+                wb[wbIdx][i].nextLoss = round[i].id; wb[wbIdx][i].slotLoss = 'p2';
+            }
+        } else {
+            for(let i=0; i<round.length; i++) {
+                lb[k-1][2*i].nextWin = round[i].id; lb[k-1][2*i].slotWin = 'p1';
+                lb[k-1][2*i+1].nextWin = round[i].id; lb[k-1][2*i+1].slotWin = 'p2';
+            }
+        }
+        if(k < lbRoundsCount - 1) {
+            const nextCount = lb[k+1].length;
+            for(let i=0; i<round.length; i++) {
+                if(round.length === nextCount) {
+                    round[i].nextWin = lb[k+1][i].id;
+                    round[i].slotWin = 'p1';
+                } else {
+                    round[i].nextWin = lb[k+1][Math.floor(i/2)].id;
+                    round[i].slotWin = i%2===0 ? 'p1' : 'p2';
+                }
+            }
+        } else {
+            round[0].nextWin = 'GF'; round[0].slotWin = 'p2';
+        }
+    }
+    matches['GF'] = { id:'GF', round:'GF', index:0, p1:null, p2:null, winner:null, nextWin:null, nextLoss:null, slotWin:'p1', slotLoss:'p1', isFinal:true };
+    return matches;
+}
+function generateSingleBracket(seedArray) {
+    const size = nextPow2(seedArray.length);
+    const padded = [...seedArray]; while(padded.length < size) padded.push(null);
+    const roundsCount = Math.log2(size);
+    const matches = {};
+    for(let r=0; r<roundsCount; r++) {
+        const count = size / Math.pow(2, r+1);
+        for(let i=0; i<count; i++) {
+            const id = `SE-R${r+1}-M${i}`;
+            const m = { id, round:`Раунд ${r+1}`, index:i, p1:null, p2:null, winner:null, nextMatch:null, slot:null };
+            if(r===0) { m.p1 = padded[i*2]; m.p2 = padded[i*2+1]; }
+            if(r < roundsCount-1) {
+                m.nextMatch = `SE-R${r+2}-M${Math.floor(i/2)}`;
+                m.slot = i%2===0 ? 'p1' : 'p2';
+            }
+            matches[id] = m;
+        }
+    }
+    return matches;
+}
+
+// ========== ROUND ROBIN (исправленный) ==========
+function getSortedTeams() {
+    return [...teams].sort((a,b) => a.localeCompare(b));
+}
+
+function generateRoundRobin(teamsList) {
+    const sorted = [...teamsList].sort((a,b) => a.localeCompare(b));
+    const n = sorted.length;
+    const teamsCopy = [...sorted];
+    const hasBye = n % 2 !== 0;
+    if (hasBye) teamsCopy.push('BYE');
+    const totalTeams = teamsCopy.length;
+    const roundsCount = totalTeams - 1;
+    const rounds = [];
+    
+    const fixed = teamsCopy[0];
+    let circle = teamsCopy.slice(1);
+    
+    for (let r = 0; r < roundsCount; r++) {
+        const matches = [];
+        const pair1 = [fixed, circle[circle.length-1]];
+        if (!pair1.includes('BYE')) {
+            matches.push({ team1: pair1[0], team2: pair1[1], winner: null });
+        }
+        for (let i = 0; i < circle.length / 2 - 1; i++) {
+            const t1 = circle[i];
+            const t2 = circle[circle.length - 2 - i];
+            if (t1 !== 'BYE' && t2 !== 'BYE') {
+                matches.push({ team1: t1, team2: t2, winner: null });
+            }
+        }
+        rounds.push({ matches });
+        circle = [circle[circle.length-1], ...circle.slice(0, -1)];
+    }
+    
+    const results = {};
+    sorted.forEach(t => { results[t] = {}; });
+    for (let i = 0; i < sorted.length; i++) {
+        for (let j = i+1; j < sorted.length; j++) {
+            const a = sorted[i], b = sorted[j];
+            results[a][b] = null;
+        }
+    }
+    
+    const standings = calculateRRStandings(sorted, results);
+    return { rounds, results, standings };
+}
+
+function calculateRRStandings(sortedTeams, results) {
+    const standings = {};
+    sortedTeams.forEach(t => { standings[t] = { played:0, wins:0, draws:0, losses:0 }; });
+    for (let i = 0; i < sortedTeams.length; i++) {
+        for (let j = i+1; j < sortedTeams.length; j++) {
+            const a = sortedTeams[i], b = sortedTeams[j];
+            const winner = results[a]?.[b];
+            if (winner) {
+                standings[a].played++; standings[b].played++;
+                if (winner === a) { standings[a].wins++; standings[b].losses++; }
+                else if (winner === b) { standings[b].wins++; standings[a].losses++; }
+                else if (winner === 'draw') { standings[a].draws++; standings[b].draws++; }
+            }
+        }
+    }
+    return standings;
+}
+
+function setRRResult(team1, team2, winner) {
+    const rr = tournamentData.rr;
+    const sorted = getSortedTeams();
+    let a = team1, b = team2;
+    if (a > b) { [a, b] = [b, a]; }
+    if (!rr.results[a]) rr.results[a] = {};
+    rr.results[a][b] = winner;
+    
+    rr.standings = calculateRRStandings(sorted, rr.results);
+    
+    rr.rounds.forEach(round => {
+        round.matches.forEach(m => {
+            if ((m.team1 === team1 && m.team2 === team2) || (m.team1 === team2 && m.team2 === team1)) {
+                m.winner = winner;
+            }
+        });
+    });
+    rr.isDirty = true;
+    renderRoundRobin();
+    saveToCache();
+}
+
+// ========== ОТРИСОВКА ROUND ROBIN ==========
+function renderRoundRobin() {
+    const rr = tournamentData.rr;
+    renderRRMatrix();
+    renderRRRounds();
+    renderRRStandings();
+    updateProgress();
+}
+
+function renderRRMatrix() {
+    const container = $('rrMatrixContainer');
+    const sorted = getSortedTeams();
+    const results = tournamentData.rr.results;
+    
+    let html = '<table><tr><th>Команда</th>';
+    sorted.forEach(t => html += `<th>${t}</th>`);
+    html += '</tr>';
+    
+    sorted.forEach(teamA => {
+        html += `<tr><th>${teamA}</th>`;
+        sorted.forEach(teamB => {
+            if (teamA === teamB) {
+                html += `<td class="diagonal">—</td>`;
+            } else {
+                const a = teamA < teamB ? teamA : teamB;
+                const b = teamA < teamB ? teamB : teamA;
+                const winner = results[a]?.[b];
+                let cellClass = '';
+                let display = '';
+                if (winner === teamA) { cellClass = 'cell-win'; display = '🏆'; }
+                else if (winner === teamB) { cellClass = 'cell-loss'; display = '❌'; }
+                else if (winner === 'draw') { cellClass = 'cell-draw'; display = '🤝'; }
+                else { display = '—'; }
+                html += `<td class="${cellClass}">${display}</td>`;
+            }
+        });
+        html += '</tr>';
+    });
+    html += '</table>';
+    container.innerHTML = html;
+}
+
+function renderRRRounds() {
+    const container = $('rrRoundsContainer');
+    const rounds = tournamentData.rr.rounds;
+    let html = '';
+    rounds.forEach((round, idx) => {
+        html += `<div class="rr-round"><h4>Тур ${idx+1}</h4>`;
+        round.matches.forEach((m, mIdx) => {
+            const t1 = m.team1, t2 = m.team2;
+            const winner = m.winner;
+            const t1Class = `rr-team ${winner === t1 ? 'winner' : (winner && winner !== t1 ? 'loser' : '')}`;
+            const t2Class = `rr-team ${winner === t2 ? 'winner' : (winner && winner !== t2 ? 'loser' : '')}`;
+            html += `<div class="rr-match">
+                <span class="${t1Class}" onclick="setRRResult('${t1}','${t2}','${t1}')">${t1}</span>
+                <span class="rr-vs">vs</span>
+                <span class="${t2Class}" onclick="setRRResult('${t1}','${t2}','${t2}')">${t2}</span>
+            </div>`;
+        });
+        html += `</div>`;
+    });
+    container.innerHTML = html;
+}
+
+function renderRRStandings() {
+    const standings = tournamentData.rr.standings;
+    const sortedTeams = getSortedTeams();
+    const sorted = Object.entries(standings).sort((a,b) => {
+        if (b[1].wins !== a[1].wins) return b[1].wins - a[1].wins;
+        if (a[1].losses !== b[1].losses) return a[1].losses - b[1].losses;
+        return b[1].draws - a[1].draws;
+    });
+    let sHtml = `<table><tr><th>#</th><th>Команда</th><th>И</th><th>В</th><th>Н</th><th>П</th><th>% побед</th></tr>`;
+    sorted.forEach(([team, stat], i) => {
+        const winPct = stat.played > 0 ? ((stat.wins / stat.played) * 100).toFixed(1) : '0.0';
+        sHtml += `<tr><td>${i+1}</td><td>${team}</td><td>${stat.played}</td><td>${stat.wins}</td><td>${stat.draws}</td><td>${stat.losses}</td><td>${winPct}%</td></tr>`;
+    });
+    sHtml += `</table>`;
+    $('rrStandingsContainer').innerHTML = sHtml;
+}
+
+function updateProgress() {
+    const rr = tournamentData.rr;
+    const sorted = getSortedTeams();
+    const totalPairs = sorted.length * (sorted.length - 1) / 2;
+    let played = 0;
+    for (let i = 0; i < sorted.length; i++) {
+        for (let j = i+1; j < sorted.length; j++) {
+            const a = sorted[i], b = sorted[j];
+            if (rr.results[a]?.[b]) played++;
+        }
+    }
+    $('rrProgress').innerHTML = `Сыграно матчей: ${played} / ${totalPairs}`;
+}
+
+// ========== ОСТАЛЬНЫЕ ФУНКЦИИ РЕНДЕРИНГА ==========
+function render() {
+    const type = currentTournamentType;
+    $('doubleElimView').style.display = type === 'double' ? 'block' : 'none';
+    $('singleElimView').style.display = type === 'single' ? 'block' : 'none';
+    $('roundRobinView').style.display = type === 'rr' ? 'block' : 'none';
+    $('tournamentTabs').style.display = 'flex';
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === type);
+    });
+
+    let champion = null;
+    if (type === 'double') {
+        const gf = tournamentData.double.matches['GF'];
+        champion = gf?.winner;
+        renderDoubleBracket();
+    } else if (type === 'single') {
+        const finalMatches = Object.values(tournamentData.single.matches).filter(m => !m.nextMatch);
+        champion = finalMatches[0]?.winner;
+        renderSingleBracket();
+    } else if (type === 'rr') {
+        champion = getRRChampion();
+        renderRoundRobin();
+    }
+
+    if (champion) {
+        $('championBanner').style.display = 'block';
+        $('championName').textContent = champion;
+        $('championDesc').textContent = type==='rr' ? 'Победитель кругового турнира!' : 'Победитель турнира!';
+    } else {
+        $('championBanner').style.display = 'none';
+    }
+
+    const isDirty = type==='double' ? tournamentData.double.isDirty : (type==='single' ? tournamentData.single.isDirty : tournamentData.rr.isDirty);
+    $('reshuffleBtn').style.display = isDirty ? 'none' : 'inline-block';
+}
+
+function getRRChampion() {
+    const sorted = Object.entries(tournamentData.rr.standings).sort((a,b) => {
+        if (b[1].wins !== a[1].wins) return b[1].wins - a[1].wins;
+        if (a[1].losses !== b[1].losses) return a[1].losses - b[1].losses;
+        return b[1].draws - a[1].draws;
+    });
+    return sorted.length ? sorted[0][0] : null;
+}
+
+function renderDoubleBracket() {
+    const renderCol = (containerId, prefix) => {
+        const c = $(containerId); c.innerHTML = '';
+        const grouped = {};
+        Object.values(tournamentData.double.matches).filter(m => m.round && m.round.startsWith(prefix) && !m.isFinal)
+            .forEach(m => (grouped[m.round] = grouped[m.round] || []).push(m));
+        Object.keys(grouped).sort().forEach(rKey => {
+            const col = document.createElement('div'); col.className = 'round-column';
+            col.innerHTML = `<div class="round-header">${rKey}</div>`;
+            grouped[rKey].forEach(m => col.appendChild(createMatchEl(m, 'double')));
+            c.appendChild(col);
+        });
+    };
+    renderCol('wbContainer', 'WB');
+    renderCol('lbContainer', 'LB');
+    const gf = tournamentData.double.matches['GF'];
+    $('gfContainer').innerHTML = gf ? createMatchEl(gf, 'double', true).outerHTML : '';
+}
+
+function renderSingleBracket() {
+    const c = $('seBracketContainer'); c.innerHTML = '';
+    const grouped = {};
+    Object.values(tournamentData.single.matches).filter(m => m.nextMatch)
+        .forEach(m => (grouped[m.round] = grouped[m.round] || []).push(m));
+    Object.keys(grouped).sort().forEach(rKey => {
+        const col = document.createElement('div'); col.className = 'round-column';
+        col.innerHTML = `<div class="round-header">${rKey}</div>`;
+        grouped[rKey].forEach(m => col.appendChild(createMatchEl(m, 'single')));
+        c.appendChild(col);
+    });
+    const finalMatch = Object.values(tournamentData.single.matches).find(m => !m.nextMatch);
+    $('seFinalContainer').innerHTML = finalMatch ? createMatchEl(finalMatch, 'single', true).outerHTML : '';
+}
+
+function createMatchEl(m, type, isFinal=false) {
+    const div = document.createElement('div');
+    div.className = `match ${isFinal?'final-match':''}`;
+    const drawSlot = (p, isP1) => {
+        let cls = 'team-slot';
+        if(m.winner === p) cls += ' winner';
+        else if(m.winner && m.winner !== p) cls += ' loser';
+        else if(!p) cls += ' empty';
+        const onClick = p ? `onclick="setWinner('${m.id}','${escA(p)}','${type}')"` : '';
+        return `<div class="${cls}" ${onClick}><span>${p || '—'}</span></div>`;
+    };
+    div.innerHTML = drawSlot(m.p1, true) + drawSlot(m.p2, false);
+    return div;
+}
+
+function setWinner(matchId, player, type) {
+    let matches, propagateFn, clearFn, dirtyFlag;
+    if (type === 'double') {
+        matches = tournamentData.double.matches;
+        propagateFn = propagateDouble; clearFn = clearDownstreamDouble;
+        dirtyFlag = () => tournamentData.double.isDirty = true;
+    } else {
+        matches = tournamentData.single.matches;
+        propagateFn = propagateSingle; clearFn = clearDownstreamSingle;
+        dirtyFlag = () => tournamentData.single.isDirty = true;
+    }
+    const m = matches[matchId] || (matchId==='GF' && type==='double' ? matches['GF'] : null);
+    if(!m || !m.p1 || !m.p2) return;
+    if(m.winner === player) {
+        m.winner = null;
+        clearFn(m);
+    } else {
+        m.winner = player;
+        propagateFn(m);
+    }
+    dirtyFlag();
+    render();
+    saveToCache();
+}
+
+function propagateDouble(m) {
+    if(!m.winner) return;
+    if(m.nextWin) {
+        let next = tournamentData.double.matches[m.nextWin] || (m.nextWin==='GF' ? tournamentData.double.matches['GF'] : null);
+        if(next) next[m.slotWin] = m.winner;
+    }
+    const loser = m.p1 === m.winner ? m.p2 : m.p1;
+    if(m.nextLoss && loser) {
+        let next = tournamentData.double.matches[m.nextLoss];
+        if(next) next[m.slotLoss] = loser;
+    }
+}
+function clearDownstreamDouble(m) {
+    if(m.nextWin) {
+        let next = tournamentData.double.matches[m.nextWin] || (m.nextWin==='GF' ? tournamentData.double.matches['GF'] : null);
+        if(next && next[m.slotWin] === m.winner) {
+            next[m.slotWin] = null;
+            if(next.winner) { next.winner = null; clearDownstreamDouble(next); }
+        }
+    }
+}
+function propagateSingle(m) {
+    if(!m.winner || !m.nextMatch) return;
+    let next = tournamentData.single.matches[m.nextMatch];
+    if(next) next[m.slot] = m.winner;
+}
+function clearDownstreamSingle(m) {
+    if(m.nextMatch) {
+        let next = tournamentData.single.matches[m.nextMatch];
+        if(next && next[m.slot] === m.winner) {
+            next[m.slot] = null;
+            if(next.winner) { next.winner = null; clearDownstreamSingle(next); }
+        }
+    }
+}
+
+// ========== ИНИЦИАЛИЗАЦИЯ ТУРНИРА ==========
+function initTournament() {
+    currentTournamentType = $('tournamentTypeSelect').value;
+    if(teams.length < 2) return;
+    
+    const shuffled = shuffle([...teams]);
+    if (currentTournamentType === 'double') {
+        tournamentData.double.matches = generateDoubleBracket(shuffled);
+        tournamentData.double.isDirty = false;
+    } else if (currentTournamentType === 'single') {
+        tournamentData.single.matches = generateSingleBracket(shuffled);
+        tournamentData.single.isDirty = false;
+    } else if (currentTournamentType === 'rr') {
+        const { rounds, results, standings } = generateRoundRobin(teams);
+        tournamentData.rr = { rounds, results, standings, isDirty: false };
+    }
+    showTournament();
+    saveToCache();
+}
+
+function showTournament() { $('setupScreen').style.display='none'; $('tournamentScreen').style.display='block'; render(); }
+function goBack() { $('setupScreen').style.display='block'; $('tournamentScreen').style.display='none'; }
+
+function reshuffleSeeds() {
+    if(currentTournamentType==='double' && tournamentData.double.isDirty) return alert('Матчи уже начаты');
+    if(currentTournamentType==='single' && tournamentData.single.isDirty) return alert('Матчи уже начаты');
+    if(currentTournamentType==='rr') return alert('Для Round Robin перетасовка недоступна');
+    const shuffled = shuffle([...teams]);
+    if(currentTournamentType==='double') tournamentData.double.matches = generateDoubleBracket(shuffled);
+    else tournamentData.single.matches = generateSingleBracket(shuffled);
+    render();
+    saveToCache();
+}
+
+function openSeedEditor() {
+    if((currentTournamentType==='double' && tournamentData.double.isDirty) || 
+       (currentTournamentType==='single' && tournamentData.single.isDirty) ||
+       currentTournamentType==='rr') return alert('Недоступно');
+    const matches = currentTournamentType==='double' ? tournamentData.double.matches : tournamentData.single.matches;
+    const r1 = Object.values(matches).filter(m => m.round && (m.round.startsWith('WB-R1')||m.round.startsWith('Раунд 1'))).sort((a,b)=>a.index-b.index);
+    const c = $('seedEditorContent'); c.innerHTML = '';
+    const opts = teams.map(t => `<option value="${escA(t)}">${t}</option>`).join('');
+    r1.forEach((m,i) => {
+        c.innerHTML += `<div class="seed-row">
+            <span style="color:var(--dim);width:60px">Матч ${i+1}</span>
+            <select id="s1_${i}"><option value="">—</option>${opts}</select>
+            <span>vs</span>
+            <select id="s2_${i}"><option value="">—</option>${opts}</select>
+        </div>`;
+        setTimeout(()=>{ if(m.p1) $(`s1_${i}`).value=m.p1; if(m.p2) $(`s2_${i}`).value=m.p2; },0);
+    });
+    $('seedModal').style.display='flex';
+}
+function closeSeedEditor() { $('seedModal').style.display='none'; }
+function applySeeds() {
+    const matches = currentTournamentType==='double' ? tournamentData.double.matches : tournamentData.single.matches;
+    const r1 = Object.values(matches).filter(m => m.round && (m.round.startsWith('WB-R1')||m.round.startsWith('Раунд 1'))).sort((a,b)=>a.index-b.index);
+    r1.forEach((m,i)=>{ m.p1=$(`s1_${i}`).value||null; m.p2=$(`s2_${i}`).value||null; m.winner=null; });
+    Object.values(matches).forEach(m => { if(m.round && !(m.round.startsWith('WB-R1')||m.round.startsWith('Раунд 1'))) { m.p1=m.p2=m.winner=null; } });
+    closeSeedEditor(); render(); saveToCache();
+}
+
+// ========== ЭКСПОРТ / ИМПОРТ ==========
+function exportData() {
+    const data = {
+        teams,
+        currentTournamentType,
+        tournamentData
+    };
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tournament_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function importData() {
+    const input = $('importFileInput');
+    input.value = ''; // сброс, чтобы срабатывал change даже при повторном выборе того же файла
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const imported = JSON.parse(ev.target.result);
+                // Базовая валидация структуры
+                if (!imported.teams || !Array.isArray(imported.teams) || 
+                    !imported.currentTournamentType || !imported.tournamentData) {
+                    throw new Error('Неверный формат файла');
+                }
+                if (!confirm('Заменить текущий турнир импортированными данными?')) return;
+                teams = imported.teams;
+                currentTournamentType = imported.currentTournamentType;
+                tournamentData = imported.tournamentData;
+                $('tournamentTypeSelect').value = currentTournamentType;
+                updateStartBtn();
+                renderTeamList();
+                if ($('tournamentScreen').style.display === 'block') {
+                    render();
+                }
+                saveToCache();
+                alert('Импорт выполнен успешно.');
+            } catch (err) {
+                alert('Ошибка импорта: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+
+// Кэширование
+function saveToCache() {
+    localStorage.setItem('de_tournament_v10', JSON.stringify({
+        teams, currentTournamentType, tournamentData
+    }));
+}
+function loadFromCache() {
+    const d = JSON.parse(localStorage.getItem('de_tournament_v10'));
+    if(d) {
+        teams = d.teams; currentTournamentType = d.currentTournamentType; tournamentData = d.tournamentData;
+        $('tournamentTypeSelect').value = currentTournamentType;
+        updateStartBtn(); renderTeamList(); showTournament();
+    }
+}
+function resetTournament() {
+    if(confirm('Сбросить весь прогресс?')) { localStorage.removeItem('de_tournament_v10'); location.reload(); }
+}
+
+// Переключение вкладок
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const type = btn.dataset.tab;
+        if(type === currentTournamentType) return;
+        if(confirm(`Переключиться на ${type}?`)) {
+            currentTournamentType = type;
+            $('tournamentTypeSelect').value = type;
+            if(type === 'double' && !tournamentData.double.matches) tournamentData.double.matches = generateDoubleBracket(shuffle([...teams]));
+            else if(type === 'single' && !tournamentData.single.matches) tournamentData.single.matches = generateSingleBracket(shuffle([...teams]));
+            else if(type === 'rr' && !tournamentData.rr.rounds) {
+                const { rounds, results, standings } = generateRoundRobin(teams);
+                tournamentData.rr = { rounds, results, standings, isDirty: false };
+            }
+            render();
+        }
+    });
+});
+
+init();
+</script>
+</body>
+</html>
